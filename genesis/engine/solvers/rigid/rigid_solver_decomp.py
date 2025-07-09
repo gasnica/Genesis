@@ -234,7 +234,15 @@ class RigidSolver(Solver):
         )
 
         if self.is_active():
-            self._init_mass_mat()
+            self._init_mass_mat(
+                self._rigid_global_info,
+                self.n_dofs_,
+                self.n_entities_,
+                self._entities,
+                self.n_links,
+                self.links,
+                self._batch_shape,
+            )
             self._init_dof_fields()
             self._init_vert_fields()
             self._init_vvert_fields()
@@ -394,37 +402,61 @@ class RigidSolver(Solver):
         else:
             return (B, shape) if first_dim else (shape, B)
 
-    def _init_mass_mat(self):
-        self.entity_max_dofs = max([entity.n_dofs for entity in self._entities])
+    # todo: move to RigidGlobalInfo
+    # todo: have entities representing num entities, and remove n_entities param
+    def _init_mass_mat(
+        self_unused,
+        rigid_global_info: array_class.RigidGlobalInfo,
+        n_dofs: int,
+        n_entities: int,
+        entities: list[Entity],
+        n_links: int,
+        links: list[Link],
+        f_batch_shape: Callable,
+    ):
 
-        self.mass_mat = ti.field(dtype=gs.ti_float, shape=self._batch_shape((self.n_dofs_, self.n_dofs_)))
-        self.mass_mat_L = ti.field(dtype=gs.ti_float, shape=self._batch_shape((self.n_dofs_, self.n_dofs_)))
-        self.mass_mat_D_inv = ti.field(dtype=gs.ti_float, shape=self._batch_shape((self.n_dofs_,)))
+        rgi: array_class.RigidGlobalInfo = rigid_global_info
 
-        self._mass_mat_mask = ti.field(dtype=gs.ti_int, shape=self._batch_shape(self.n_entities_))
-        self._mass_mat_mask.fill(1)
+        # warning: this may: entities may be an empty list !!
+        rgi.entity_max_dofs = ti.field(dtype=gs.ti_float, shape=())
+        rgi.entity_max_dofs[None] = max([entity.n_dofs for entity in entities])
 
-        self.meaninertia = ti.field(dtype=gs.ti_float, shape=self._batch_shape())
+        rgi.mass_mat = ti.field(dtype=gs.ti_float, shape=f_batch_shape((n_dofs, n_dofs)))
+        rgi.mass_mat_L = ti.field(dtype=gs.ti_float, shape=f_batch_shape((n_dofs, n_dofs)))
+        rgi.mass_mat_D_inv = ti.field(dtype=gs.ti_float, shape=f_batch_shape((n_dofs,)))
+
+        rgi._mass_mat_mask = ti.field(dtype=gs.ti_int, shape=f_batch_shape(n_entities))
+        rgi._mass_mat_mask.fill(1)
+
+        rgi.meaninertia = ti.field(dtype=gs.ti_float, shape=f_batch_shape())
 
         # tree structure information
-        mass_parent_mask = np.zeros((self.n_dofs_, self.n_dofs_), dtype=gs.np_float)
+        mass_parent_mask = np.zeros((n_dofs, n_dofs), dtype=gs.np_float)
 
-        for i in range(self.n_links):
+        for i in range(n_links):
             j = i
             while j != -1:
                 for i_d, j_d in ti.ndrange(
-                    (self.links[i].dof_start, self.links[i].dof_end), (self.links[j].dof_start, self.links[j].dof_end)
+                    (links[i].dof_start, links[i].dof_end), (links[j].dof_start, links[j].dof_end)
                 ):
                     mass_parent_mask[i_d, j_d] = 1.0
-                j = self.links[j].parent_idx
+                j = links[j].parent_idx
 
-        self.mass_parent_mask = ti.field(dtype=gs.ti_float, shape=(self.n_dofs_, self.n_dofs_))
-        self.mass_parent_mask.from_numpy(mass_parent_mask)
+        rgi.mass_parent_mask = ti.field(dtype=gs.ti_float, shape=(n_dofs, n_dofs))
+        rgi.mass_parent_mask.from_numpy(mass_parent_mask)
 
         # just in case
-        self.mass_mat_L.fill(0)
-        self.mass_mat_D_inv.fill(0)
-        self.meaninertia.fill(0)
+        rgi.mass_mat_L.fill(0)
+        rgi.mass_mat_D_inv.fill(0)
+        rgi.meaninertia.fill(0)
+
+        # temporary, while proting: allow using self
+        self_unused.entity_max_dofs = rgi.entity_max_dofs[None]
+        self_unused.mass_mat = rgi.mass_mat
+        self_unused.mass_mat_L = rgi.mass_mat_L
+        self_unused.mass_mat_D_inv = rgi.mass_mat_D_inv
+        self_unused._mass_mat_mask = rgi._mass_mat_mask
+        self_unused.meaninertia = rgi.meaninertia
 
     def _init_dof_fields(self):
         if self._use_hibernation:
