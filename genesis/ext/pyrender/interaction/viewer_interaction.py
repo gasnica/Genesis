@@ -106,6 +106,7 @@ class ViewerInteraction(ViewerInteractionBase):
 
     @override
     def update_on_sim_step(self) -> None:
+        Timer2.begin("interaction.update_on_sim_step")
         with self.lock:
             if self.picked_link:
                 mouse_ray: Ray = self.screen_position_to_ray(*self.prev_mouse_pos)
@@ -125,17 +126,21 @@ class ViewerInteraction(ViewerInteractionBase):
                         pos = Vec3.from_tensor(self.picked_link.entity.get_pos())
                         pos += delta_3d_pos
                         self.picked_link.entity.set_pos(pos.as_tensor())
+        Timer2.end()
 
     @override
     def on_draw(self) -> None:
+        Timer2.begin("interaction.on_draw")
         super().on_draw()
         if self.scene._visualizer is not None and self.scene._visualizer.viewer_lock is not None:
             self.scene.clear_debug_objects()
             mouse_ray: Ray = self.screen_position_to_ray(*self.prev_mouse_pos)
 
+            Timer2.begin("raycast scene")
             closest_hit = self.raycast_against_entities(mouse_ray)
             if not closest_hit.is_hit:
                 closest_hit = self._raycast_against_ground_plane(mouse_ray)
+            Timer2.end()
 
             with self.lock:
                 if self.picked_link:
@@ -157,6 +162,8 @@ class ViewerInteraction(ViewerInteractionBase):
                         self._draw_arrow(closest_hit.position, 0.25 * closest_hit.normal, (0, 1, 0, 1))
                     if closest_hit.geom:
                         self._draw_entity_unrotated_obb(closest_hit.geom)
+                        self._raycast_geom(closest_hit.geom, mouse_ray)
+        Timer2.end()
 
 
     def screen_position_to_ray(self, x: float, y: float) -> Ray:

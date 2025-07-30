@@ -42,6 +42,8 @@ from genesis.utils.misc import redirect_libc_stderr, tensor_to_array
 from genesis.vis import Visualizer
 from genesis.utils.warnings import warn_once
 
+from genesis.utils.tools import Timer, Timer2
+
 
 @gs.assert_initialized
 class Scene(RBC):
@@ -809,12 +811,16 @@ class Scene(RBC):
         if not self._forward_ready:
             gs.raise_exception("Forward simulation not allowed after backward pass. Please reset scene state.")
 
+        Timer2.begin("sim step")
         self._sim.step()
 
         self._t += 1
 
         if update_visualizer:
+            Timer2.split("visualizer")
             self._visualizer.update(force=False, auto=refresh_visualizer)
+
+        Timer2.end()
 
         if self.profiling_options.show_FPS:
             self.FPS_tracker.step()
