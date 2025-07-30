@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import inspect
 import os
 import threading
@@ -157,6 +159,101 @@ def create_timer(name=None, new=False, level=0, ti_sync=False, skip_first_call=F
             timer = Timer(skip=skip_first_call, level=level, ti_sync=ti_sync)
             timers[name] = timer
             return timer
+
+
+@dataclass
+class TimeStamp2:
+    counter: int
+    scope_name: str | None  # None means we're closing the scope
+
+
+class Timer2:
+    def __init__(self):
+        self.stamps = []
+        self.num_lines_printed = 0
+        self.num_frames_to_skip = 1
+
+        # get class object and set classmethods on it
+        cls = type(self)
+        cls.enable(False)
+
+    @classmethod
+    def enable(cls, enabled: bool = True):
+        if enabled:
+            cls.begin = cls._begin_def
+            cls.split = cls._split_def
+            cls.end = cls._end_def
+        else:
+            cls.begin = cls._null_method
+            cls.split = cls._null_method
+            cls.end = cls._null_method
+
+    @classmethod
+    def _null_method(cls, scope_name: str = "scope"):
+        pass
+
+    @classmethod
+    def _begin_def(cls, scope_name: str):
+        _timer2_instance.stamps.append(TimeStamp2(time.perf_counter_ns(), scope_name))
+
+    @classmethod
+    def _split_def(cls, scope_name: str):
+        now = time.perf_counter_ns()
+        _timer2_instance.stamps.append(TimeStamp2(now, None))
+        _timer2_instance.stamps.append(TimeStamp2(now, scope_name))
+
+    @classmethod
+    def _end_def(cls):
+        _timer2_instance.stamps.append(TimeStamp2(time.perf_counter_ns(), None))
+
+    @classmethod
+    def print_timers_and_reset(cls):
+        self = _timer2_instance
+
+        # Hack: avoid garbaged initial frames when visualizer is threaded
+        if 0 < self.num_frames_to_skip:
+            self.num_frames_to_skip -= 1
+            self.stamps.clear()
+            return
+
+        stamp_stack: list[TimeStamp2] = []
+        insert_idx_stack: list[int] = []
+        lines: list[str] = []
+        for stamp in self.stamps:
+            if stamp.scope_name:
+                stamp_stack.append(stamp)
+                insert_idx_stack.append(len(lines))
+            else:
+                start_stamp = stamp_stack.pop()
+                indent = len(stamp_stack)
+                line = indent * "  " + str(start_stamp.scope_name)
+                delta_us = (stamp.counter - start_stamp.counter) // 1e3
+                line = f"{line:<35}{delta_us:>8.0f} μs"
+
+                insert_line_idx = insert_idx_stack.pop()
+                lines.insert(insert_line_idx, line)
+
+        assert 0 == len(stamp_stack), "Timer2 stamps are not matching."
+
+        self.stamps.clear()
+
+        # Print the lines and override old ones
+        move_cursor_up = "\033[F"
+        print(move_cursor_up * self.num_lines_printed, end="")
+        clear_line = "\033[K"
+        for line in lines:
+            print(f"{clear_line}{line}")
+
+        # Clean up remaining old lines
+        num_lines_to_clean = self.num_lines_printed - len(lines)
+        for i in range(num_lines_to_clean):
+            print(f"{clear_line}")
+        print(move_cursor_up * num_lines_to_clean, end="")
+
+        self.num_lines_printed = len(lines)
+
+
+_timer2_instance = Timer2()
 
 
 class Rate:

@@ -919,6 +919,7 @@ class RigidSolver(Solver):
             self.constraint_solver = ConstraintSolver(self)
 
     def substep(self):
+        Timer2.begin("RigidSolver.substep")
         # from genesis.utils.tools import create_timer
 
 
@@ -929,6 +930,7 @@ class RigidSolver(Solver):
                 self.optional_contact_island = ContactIsland(self.collider)
 
         # timer = create_timer("rigid", level=1, ti_sync=True, skip_first_call=True)
+        Timer2.begin("kernel_step_1")
         kernel_step_1(
             links_state=self.links_state,
             links_info=self.links_info,
@@ -945,8 +947,10 @@ class RigidSolver(Solver):
             contact_island=self.optional_contact_island,
         )
         # timer.stamp("kernel_step_1")
+        Timer2.split("_func_constraint_force")
         self._func_constraint_force()
         # timer.stamp("constraint_force")
+        Timer2.split("_kernel_step2")
         kernel_step_2(
             dofs_state=self.dofs_state,
             dofs_info=self.dofs_info,
@@ -967,6 +971,8 @@ class RigidSolver(Solver):
             contact_island=self.optional_contact_island,
         )
         # timer.stamp("kernel_step_2")
+        Timer2.end()
+        Timer2.end()
 
     def _kernel_detect_collision(self):
         self.collider.clear()
