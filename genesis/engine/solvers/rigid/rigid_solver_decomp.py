@@ -15,6 +15,7 @@ from genesis.engine.entities import AvatarEntity, DroneEntity, RigidEntity
 from genesis.engine.states.solvers import RigidSolverState
 from genesis.styles import colors, formats
 import genesis.engine.solvers.rigid.array_class as array_class
+from genesis.utils.tools import Timer2
 
 from ..base_solver import Solver
 from .collider_decomp import Collider
@@ -1917,9 +1918,11 @@ class RigidSolver(Solver):
         )
 
     def substep(self):
+        Timer2.begin("RigidSolver.substep")
         # from genesis.utils.tools import create_timer
 
         # timer = create_timer("rigid", level=1, ti_sync=True, skip_first_call=True)
+        Timer2.begin("kernel_step_1")
         self._kernel_step_1(
             links_state=self.links_state,
             links_info=self.links_info,
@@ -1934,8 +1937,10 @@ class RigidSolver(Solver):
             static_rigid_sim_config=self._static_rigid_sim_config,
         )
         # timer.stamp("kernel_step_1")
+        Timer2.split("_func_constraint_force")
         self._func_constraint_force()
         # timer.stamp("constraint_force")
+        Timer2.split("_kernel_step2")
         self._kernel_step_2(
             dofs_state=self.dofs_state,
             dofs_info=self.dofs_info,
@@ -1952,6 +1957,8 @@ class RigidSolver(Solver):
             static_rigid_sim_config=self._static_rigid_sim_config,
         )
         # timer.stamp("kernel_step_2")
+        Timer2.end()
+        Timer2.end()
 
     @ti.func
     def _func_update_cartesian_space(
