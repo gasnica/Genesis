@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-import sys
 
+import numpy as np
 from genesis.engine.entities.rigid_entity.rigid_geom import RigidGeom
 
 from .vec3 import Vec3
@@ -9,7 +9,7 @@ from .vec3 import Vec3
 EPSILON = 1e-6
 EPSILON2 = EPSILON * EPSILON
 
-_MAX_RAY_DISTANCE = sys.float_info.max
+_MAX_RAY_DISTANCE = np.finfo(np.float32).max
 
 
 class Ray:
