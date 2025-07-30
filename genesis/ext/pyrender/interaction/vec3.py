@@ -70,7 +70,7 @@ class Vec3:
         return Vec3(self.v.copy())
 
     def __repr__(self) -> str:
-        return f"Vec3({self.v[0]}, {self.v[1]}, {self.v[2]})"
+        return f"Vec3({self.v[0]:.7f}, {self.v[1]:.7f}, {self.v[2]:.7f})"
 
     def as_tensor(self) -> 'torch.Tensor':
         _ensure_torch_imported()
@@ -165,7 +165,7 @@ class Quat:
         return Quat(self.v.copy())
 
     def __repr__(self) -> str:
-        return f"Quat({self.v[0]}, {self.v[1]}, {self.v[2]}, {self.v[3]})"
+        return f"Quat({self.v[0]:.7f}, {self.v[1]:.7f}, {self.v[2]:.7f}, {self.v[3]:.7f})"
 
     def as_tensor(self) -> 'torch.Tensor':
         _ensure_torch_imported()
