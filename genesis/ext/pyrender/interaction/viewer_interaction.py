@@ -3,8 +3,10 @@ from typing_extensions import override
 from threading import Lock as threading_Lock
 
 import numpy as np
+import taichi as ti
 
 import genesis as gs
+import genesis.utils.geom as gu
 from genesis.engine.entities.rigid_entity.rigid_entity import RigidEntity
 
 from .aabb import AABB, OBB
@@ -13,6 +15,10 @@ from .ray import Plane, Ray, RayHit
 from .vec3 import Pose, Quat, Vec3, Color
 from .viewer_interaction_base import ViewerInteractionBase, EVENT_HANDLE_STATE, EVENT_HANDLED
 
+from genesis.engine.solvers.rigid.rigid_solver_decomp import RigidSolver
+import genesis.engine.solvers.rigid.array_class as array_class
+from genesis.utils.tools import Timer2
+
 if TYPE_CHECKING:
     from genesis.engine.entities.rigid_entity.rigid_geom import RigidGeom
     from genesis.engine.entities.rigid_entity.rigid_link import RigidLink
@@ -20,6 +26,16 @@ if TYPE_CHECKING:
     from genesis.ext.pyrender.node import Node
 
 
+@ti.dataclass
+class tiRayHit:
+    # point: ti.types.vector.f32 #ti.math.vec3
+    # normal: ti.types.vector.f32 # ti.math.vec3
+    position: ti.math.vec3
+    normal: ti.math.vec3
+    distance: ti.float32
+
+
+@ti.data_oriented
 class ViewerInteraction(ViewerInteractionBase):
     """Functionalities to be implemented:
     - mouse picking
@@ -50,6 +66,10 @@ class ViewerInteraction(ViewerInteractionBase):
 
         self.mouse_spring: MouseSpring = MouseSpring()
         self.lock = threading_Lock()
+
+        # todo:shorter alias ? ti.math.vec3.field?
+        self.temp_raycast_out = ti.Vector.field(3, dtype=gs.ti_float, shape=())
+        self.temp_rayhit_out = tiRayHit.field(shape=())
 
     @override
     def on_mouse_motion(self, x: int, y: int, dx: int, dy: int) -> EVENT_HANDLE_STATE:
@@ -265,3 +285,150 @@ class ViewerInteraction(ViewerInteractionBase):
             aabb: AABB = AABB.from_center_and_half_extents(obb.pose.pos, obb.half_extents)
             aabb.expand(padding=0.01)
             self.scene.draw_debug_box(aabb.v, color=Color.red().with_alpha(0.5).tuple(), wireframe=False)
+
+        if True or isinstance(geom.entity.morph, gs.morphs.Box):
+            self._draw_some_geometry_points(geom)
+
+    # we know it's a box
+    def _draw_some_geometry_points(self, geom: 'RigidGeom') -> None:
+        return
+
+        # get points
+        verts = geom.get_verts() # in world space
+        for i in range(verts.shape[0]):
+            # pos = Vec3.from_tensor(verts[i])
+            # self.scene.draw_debug_sphere(pos.v, 0.01, (1, 0, 0, 1))
+            self.scene.draw_debug_sphere(verts[i], 0.01, (1, 0, 0, 1))
+
+        # tris = geom.get_faces()
+        # num_tris = min(tris.shape[0], 12)
+        # for i in range(num_tris):
+        #     self.scene.draw_debug_line(verts[tris[i, 0]], verts[tris[i, 1]], color=(0, 1, 0, 1))
+        #     self.scene.draw_debug_line(verts[tris[i, 1]], verts[tris[i, 2]], color=(0, 1, 0, 1))
+        #     self.scene.draw_debug_line(verts[tris[i, 2]], verts[tris[i, 0]], color=(0, 1, 0, 1))
+
+        # geom.face_start same as geom._solver.geoms_info.face_start[geom.idx]
+
+        face_end_tranctuated = min(geom.face_end, geom.face_start + 12)
+        for face_idx in range(geom.face_start, face_end_tranctuated):
+            assert geom._solver.faces_info.geom_idx[face_idx] == geom.idx
+            verts_indices = gs.ti_ivec3(geom._solver.faces_info.verts_idx[face_idx])  # copy to modify
+            verts_indices[0] -= geom.vert_start  # reverting offset added in _init_vert_fields
+            verts_indices[1] -= geom.vert_start  # reverting offset added in _init_vert_fields
+            verts_indices[2] -= geom.vert_start  # reverting offset added in _init_vert_fields
+
+            self.scene.draw_debug_line(verts[verts_indices[0]], verts[verts_indices[1]], color=(0, 1, 0, 1))
+            self.scene.draw_debug_line(verts[verts_indices[1]], verts[verts_indices[2]], color=(0, 1, 0, 1))
+            self.scene.draw_debug_line(verts[verts_indices[2]], verts[verts_indices[0]], color=(0, 1, 0, 1))
+
+        # Draw AABBs for all geometries
+        if False:
+            for entity in self.scene.sim.rigid_solver.entities:
+                for geom in entity.geoms:
+                    aabb: torch.Tensor = geom.get_AABB()
+                    self.scene.draw_debug_box(aabb, color=Color.red().with_alpha(0.5).tuple(), wireframe=False)
+                    ziu = 0
+
+
+    def _raycast_geom(self, geom: 'RigidGeom', ray: Ray) -> RayHit:
+        if not self.scene.is_built:
+            return
+
+        tri_idx = self._kernel_raycast_geom_in_local(geom, ti.math.vec3(*ray.origin.v), ti.math.vec3(*ray.direction.v))
+        if -1 != tri_idx:
+            self.scene.draw_debug_sphere(self.temp_rayhit_out[None].position, radius=0.05, color=(0, 0, 1, 1))
+
+        
+    @ti.kernel
+    def _kernel_raycast_geom_in_local(self, geom: ti.template(), ray_origin: ti.math.vec3, ray_direction: ti.math.vec3) -> int:       
+        b = 0  # batch index
+        solver = geom._solver  # RigidSolver
+        geoms_info = solver.geoms_info  # array_class.StructGeomsInfo
+        geoms_state = solver.geoms_state  # array_class.StructGeomsState
+
+        pos = geoms_state.pos[geom._idx, b]  # ti.math.vec3
+        rot = geoms_state.quat[geom._idx, b]  # ti.math.vec4
+
+        ray_origin_in_local = gu.ti_inv_transform_by_trans_quat(ray_origin, pos, rot)
+        ray_direction_in_local = gu.ti_inv_transform_by_quat(ray_direction, rot)
+
+        face_start = geoms_info.face_start[geom._idx]
+        face_end = geoms_info.face_end[geom._idx]
+
+        faces_info = solver.faces_info  # array_class.StructFacesInfo
+        verts_info = solver.verts_info  # array_class.StructVertsInfo
+
+
+        closest_t = 1e24
+        closest_u = 0.0
+        closest_v = 0.0
+        closest_idx = -1        
+
+        min_end = min(face_end, face_start + 1024)
+        if min_end != face_end:
+            print("Warning: Geom has more than 1024 faces. Only raycasting against the first 1024 tris.")
+        for face_idx in range(face_start, face_end):
+            assert faces_info.geom_idx[face_idx] == geom._idx
+            verts_indices = gs.ti_ivec3(faces_info.verts_idx[face_idx])  # copy to modify
+
+            v0 = verts_info.init_pos[verts_indices[0]]
+            v1 = verts_info.init_pos[verts_indices[1]]
+            v2 = verts_info.init_pos[verts_indices[2]]
+
+            hit = self._func_raycast_triangle(v0, v1, v2, ray_origin_in_local, ray_direction_in_local)
+            t = hit.x
+            if t > 0.0 and t < closest_t:
+                closest_t = t
+                closest_u = hit.y
+                closest_v = hit.z
+                closest_idx = face_idx            
+
+        if -1 != closest_idx:
+            point_in_world = ray_origin + closest_t * ray_direction
+            normal = ti.math.vec3(0.0, 0.0, 0.0)
+
+            ray_hit = tiRayHit(
+                position=point_in_world,
+                normal=normal,
+                distance=closest_t
+            )
+            self.temp_rayhit_out[None] = ray_hit
+
+        return closest_idx
+
+        # verts = torch.empty((vend - vstart, 3), dtype=gs.tc_float, device=gs.device)
+        # verts = geom.func_get_verts(t)
+        # return self.raycast_against_verts(verts, ray)
+
+    # ChatGPT: using Möller–Trumbore algorithm
+    # It returns a ti.math.vec3 where:
+    #   result.x = t (intersection distance)
+    #   result.y = u (barycentric coordinate)
+    #   result.z = v (barycentric coordinate)
+    # If no hit, you can return a sentinel value (e.g. vec3(-1.0, 0.0, 0.0)).
+    @ti.func
+    def _func_raycast_triangle(self, a: ti.math.vec3, b: ti.math.vec3, c: ti.math.vec3,
+                            ray_origin: ti.math.vec3, ray_direction: ti.math.vec3) -> ti.math.vec3:
+        result = ti.math.vec3(-1.0, 0.0, 0.0)  # default = no hit
+        epsilon = 1e-6
+
+        edge1 = b - a
+        edge2 = c - a
+        h = ray_direction.cross(edge2)
+        det = edge1.dot(h)
+
+        if ti.abs(det) > epsilon:
+            inv_det = 1.0 / det
+            s = ray_origin - a
+            u = s.dot(h) * inv_det
+
+            if 0.0 <= u <= 1.0:
+                q = s.cross(edge1)
+                v = ray_direction.dot(q) * inv_det
+
+                if v >= 0.0 and (u + v) <= 1.0:
+                    t = edge2.dot(q) * inv_det
+                    if t > epsilon:
+                        result = ti.math.vec3(t, u, v)
+
+        return result        
