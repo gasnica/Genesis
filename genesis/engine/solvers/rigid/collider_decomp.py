@@ -18,6 +18,7 @@ import genesis.engine.solvers.rigid.mpr_decomp as mpr
 import genesis.utils.sdf_decomp as sdf
 import genesis.engine.solvers.rigid.support_field_decomp as support_field
 import genesis.engine.solvers.rigid.rigid_solver_decomp as rigid_solver
+from genesis.utils.tools import Timer2
 
 from .mpr_decomp import MPR
 from .gjk_decomp import GJK
@@ -282,12 +283,14 @@ class Collider:
 
         self._contacts_info_cache = {}
         # timer = create_timer(name="69477ab0-5e75-47cb-a4a5-d4eebd9336ca", level=3, ti_sync=True, skip_first_call=True)
+        Timer2.begin("update_geom_aabbs")
         rigid_solver.kernel_update_geom_aabbs(
             self._solver.geoms_state,
             self._solver.geoms_init_AABB,
             self._solver._static_rigid_sim_config,
         )
         # timer.stamp("func_update_aabbs")
+        Timer2.split("broad_phase")
         func_broad_phase(
             self._solver.links_state,
             self._solver.links_info,
@@ -298,6 +301,7 @@ class Collider:
             self._collider_state,
             self._collider_info,
         )
+        Timer2.split("np_convex_convex")
         # timer.stamp("func_broad_phase")
         func_narrow_phase_convex_vs_convex(
             self._solver.links_state,
@@ -320,6 +324,7 @@ class Collider:
             self._support_field._support_field_info,
             self._support_field._support_field_static_config,
         )
+        Timer2.split("np_convex_specializations")
         func_narrow_phase_convex_specializations(
             self._solver.geoms_state,
             self._solver.geoms_info,
@@ -333,6 +338,7 @@ class Collider:
         )
         # timer.stamp("func_narrow_phase")
         if self._collider_static_config.has_terrain:
+            Timer2.split("np_any_vs_terrain")
             func_narrow_phase_any_vs_terrain(
                 self._solver.geoms_state,
                 self._solver.geoms_info,
@@ -349,6 +355,7 @@ class Collider:
             )
             # timer.stamp("func_narrow_phase_any_vs_terrain")
         if self._collider_static_config.has_nonconvex_nonterrain:
+            Timer2.split("np_nonconvex_nonterrain")
             func_narrow_phase_nonconvex_vs_nonterrain(
                 self._solver.links_state,
                 self._solver.links_info,
@@ -365,6 +372,8 @@ class Collider:
                 self._sdf._sdf_info,
             )
             # timer.stamp("func_narrow_phase_nonconvex_vs_nonterrain")
+        Timer2.end()
+
 
     def get_contacts(self, as_tensor: bool = True, to_torch: bool = True, keep_batch_dim: bool = False):
         # Early return if already pre-computed

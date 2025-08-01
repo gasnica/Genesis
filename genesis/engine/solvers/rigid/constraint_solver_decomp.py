@@ -7,6 +7,7 @@ import genesis as gs
 import genesis.utils.geom as gu
 import genesis.utils.array_class as array_class
 import genesis.engine.solvers.rigid.rigid_solver_decomp as rigid_solver
+from genesis.utils.tools import Timer2
 
 if TYPE_CHECKING:
     from genesis.engine.solvers.rigid.rigid_solver_decomp import RigidSolver
@@ -216,6 +217,7 @@ class ConstraintSolver:
         )
 
     def handle_constraints(self):
+        Timer2.begin("add_equality_constraints")
         add_equality_constraints(
             links_info=self._solver.links_info,
             links_state=self._solver.links_state,
@@ -230,6 +232,7 @@ class ConstraintSolver:
         )
 
         if self._solver._enable_collision:
+            Timer2.split("add_collision_constraints")
             add_collision_constraints(
                 links_info=self._solver.links_info,
                 links_state=self._solver.links_state,
@@ -240,6 +243,7 @@ class ConstraintSolver:
             )
 
         if self._solver._enable_joint_limit:
+            Timer2.split("add_joint_limit_constraints")
             add_joint_limit_constraints(
                 links_info=self._solver.links_info,
                 joints_info=self._solver.joints_info,
@@ -251,12 +255,15 @@ class ConstraintSolver:
             )
 
         if self._solver._enable_collision or self._solver._enable_joint_limit or self._solver.n_equalities > 0:
+            Timer2.split("resolve")
             self.resolve()
+        Timer2.end()
 
     def resolve(self):
         # from genesis.utils.tools import create_timer
 
         # timer = create_timer(name="resolve", level=3, ti_sync=True, skip_first_call=True)
+        Timer2.begin("init_solver")
         func_init_solver(
             dofs_state=self._solver.dofs_state,
             entities_info=self._solver.entities_info,
@@ -265,6 +272,7 @@ class ConstraintSolver:
             static_rigid_sim_config=self._solver._static_rigid_sim_config,
         )
         # timer.stamp("_func_init_solver")
+        Timer2.split("solve")
         func_solve(
             entities_info=self._solver.entities_info,
             dofs_state=self._solver.dofs_state,
@@ -273,6 +281,7 @@ class ConstraintSolver:
             static_rigid_sim_config=self._solver._static_rigid_sim_config,
         )
         # timer.stamp("_func_solve")
+        Timer2.split("update_qacc")
         func_update_qacc(
             qacc_ws=self.qacc_ws,
             dofs_state=self._solver.dofs_state,
@@ -280,6 +289,7 @@ class ConstraintSolver:
             static_rigid_sim_config=self._solver._static_rigid_sim_config,
         )
         # timer.stamp("_func_update_qacc")
+        Timer2.split("update_contact_force")
         func_update_contact_force(
             links_state=self._solver.links_state,
             collider_state=self._collider._collider_state,
@@ -287,7 +297,7 @@ class ConstraintSolver:
             static_rigid_sim_config=self._solver._static_rigid_sim_config,
         )
         # timer.stamp("compute force")
-
+        Timer2.end()
 
 @ti.kernel
 def constraint_solver_kernel_clear(

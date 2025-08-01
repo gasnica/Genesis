@@ -170,6 +170,7 @@ class TimeStamp2:
 class Timer2:
     def __init__(self):
         self.stamps = []
+        self.log_lines = []
         self.num_lines_printed = 0
         self.num_frames_to_skip = 1
 
@@ -207,6 +208,10 @@ class Timer2:
         _timer2_instance.stamps.append(TimeStamp2(time.perf_counter_ns(), None))
 
     @classmethod
+    def log(cls, msg: str):
+        _timer2_instance.log_lines.append(msg)
+
+    @classmethod
     def print_timers_and_reset(cls):
         self = _timer2_instance
 
@@ -214,6 +219,7 @@ class Timer2:
         if 0 < self.num_frames_to_skip:
             self.num_frames_to_skip -= 1
             self.stamps.clear()
+            self.log_lines.clear()
             return
 
         stamp_stack: list[TimeStamp2] = []
@@ -228,7 +234,7 @@ class Timer2:
                 indent = len(stamp_stack)
                 line = indent * "  " + str(start_stamp.scope_name)
                 delta_us = (stamp.counter - start_stamp.counter) // 1e3
-                line = f"{line:<35}{delta_us:>8.0f} μs"
+                line = f"{line:<40}{delta_us:>8.0f} μs"
 
                 insert_line_idx = insert_idx_stack.pop()
                 lines.insert(insert_line_idx, line)
@@ -236,6 +242,11 @@ class Timer2:
         assert 0 == len(stamp_stack), "Timer2 stamps are not matching."
 
         self.stamps.clear()
+
+        if len(self.log_lines) > 0:
+            lines.append("-" * (40 + 8))
+            lines.extend(self.log_lines)
+            self.log_lines.clear()
 
         # Print the lines and override old ones
         move_cursor_up = "\033[F"
