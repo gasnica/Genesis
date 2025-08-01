@@ -7,6 +7,8 @@ import genesis as gs
 import genesis.utils.geom as gu
 
 import genesis.utils.array_class as array_class
+from genesis.utils.tools import Timer2
+
 from .contact_island import ContactIsland
 
 if TYPE_CHECKING:
@@ -132,8 +134,11 @@ class ConstraintSolverIsland:
                     self._func_update_contact_force(island, i_b)
 
     def handle_constraints(self):
+        Timer2.begin("contact_island.construct")
         self.contact_island.construct()
+        Timer2.split("contact_island.resolve")
         self.resolve()
+        Timer2.end()
 
     @ti.func
     def add_collision_constraints(self, island, i_b):
