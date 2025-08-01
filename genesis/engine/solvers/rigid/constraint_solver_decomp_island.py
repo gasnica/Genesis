@@ -139,8 +139,11 @@ class ConstraintSolverIsland:
                     self._func_update_contact_force(i_island, i_b)
 
     def handle_constraints(self):
+        Timer2.begin("contact_island.construct")
         self.contact_island.construct()
+        Timer2.split("contact_island.resolve")
         self.resolve()
+        Timer2.end()
 
     @ti.func
     def add_collision_constraints__and_wakeup_entities(self, i_island: int, i_b: int):
