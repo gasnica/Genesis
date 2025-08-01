@@ -13,6 +13,10 @@ from .ray import Plane, Ray, RayHit
 from .vec3 import Pose, Quat, Vec3, Color
 from .viewer_interaction_base import ViewerInteractionBase, EVENT_HANDLE_STATE, EVENT_HANDLED
 
+from genesis.engine.solvers.rigid.rigid_solver_decomp import RigidSolver
+import genesis.utils.array_class as array_class
+from genesis.utils.tools import Timer2
+
 if TYPE_CHECKING:
     from genesis.engine.entities.rigid_entity.rigid_geom import RigidGeom
     from genesis.engine.entities.rigid_entity.rigid_link import RigidLink
@@ -130,8 +134,9 @@ class ViewerInteraction(ViewerInteractionBase):
 
     @override
     def on_draw(self) -> None:
-        Timer2.begin("interaction.on_draw")
         super().on_draw()
+        return
+        Timer2.begin("interaction.on_draw")
         if self.scene._visualizer is not None and self.scene._visualizer.viewer_lock is not None:
             self.scene.clear_debug_objects()
             mouse_ray: Ray = self.screen_position_to_ray(*self.prev_mouse_pos)

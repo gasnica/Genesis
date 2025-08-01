@@ -4,7 +4,7 @@ import math
 import taichi as ti
 
 import genesis as gs
-from genesis.engine.solvers.rigid.array_class import DataManager
+from genesis.utils.array_class import DataManager
 
 class MemoryTracker:
     def __init__(self):
