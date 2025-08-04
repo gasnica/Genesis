@@ -298,3 +298,11 @@ class Color:
     @classmethod
     def yellow(cls) -> 'Color':
         return cls(1.0, 1.0, 0.0, 1.0)
+
+    @classmethod
+    def black(cls) -> 'Color':
+        return cls(0.0, 0.0, 0.0, 1.0)
+
+    @classmethod
+    def white(cls) -> 'Color':
+        return cls(1.0, 1.0, 1.0, 1.0)
