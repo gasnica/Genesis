@@ -135,39 +135,45 @@ class ViewerInteraction(ViewerInteractionBase):
     @override
     def on_draw(self) -> None:
         super().on_draw()
-        return
         Timer2.begin("interaction.on_draw")
         if self.scene._visualizer is not None and self.scene._visualizer.viewer_lock is not None:
             self.scene.clear_debug_objects()
             mouse_ray: Ray = self.screen_position_to_ray(*self.prev_mouse_pos)
 
-            Timer2.begin("raycast scene")
-            closest_hit = self.raycast_against_entities(mouse_ray)
-            if not closest_hit.is_hit:
-                closest_hit = self._raycast_against_ground_plane(mouse_ray)
-            Timer2.end()
+            highlight_object_hit_by_raycast = False
+
+            closest_hit = RayHit.no_hit()
+            if highlight_object_hit_by_raycast and not self.picked_link:
+                Timer2.begin("raycast scene")
+                closest_hit = self.raycast_against_entities(mouse_ray)
+                if not closest_hit.is_hit:
+                    closest_hit = self._raycast_against_ground_plane(mouse_ray)
+                Timer2.end()
 
             with self.lock:
                 if self.picked_link:
                     assert self.mouse_drag_plane is not None
                     assert self.picked_point_in_local is not None
 
+                    is_hibernated: bool = self.picked_link.solver.links_state.hibernated[self.picked_link.idx, 0] != 0
+                    color: Color = Color.black() if is_hibernated else Color.red()
+
                     # draw held point
                     pose: Pose = Pose.from_link(self.picked_link)
                     held_point: Vec3 = pose.transform_point(self.picked_point_in_local)
-                    self.scene.draw_debug_sphere(held_point.v, 0.02, Color.red().tuple())
+                    self.scene.draw_debug_sphere(held_point.v, 0.02, color.tuple())
 
                     plane_hit: RayHit = self.mouse_drag_plane.raycast(mouse_ray)
                     if plane_hit.is_hit:
-                        self.scene.draw_debug_sphere(plane_hit.position.v, 0.02, Color.red().tuple())
-                        self.scene.draw_debug_line(held_point.v, plane_hit.position.v, color=Color.red().tuple())
+                        self.scene.draw_debug_sphere(plane_hit.position.v, 0.02, color.tuple())
+                        self.scene.draw_debug_line(held_point.v, plane_hit.position.v, color=color.tuple())
                 else:
                     if closest_hit.is_hit:
                         self.scene.draw_debug_sphere(closest_hit.position.v, 0.01, (0, 1, 0, 1))
                         self._draw_arrow(closest_hit.position, 0.25 * closest_hit.normal, (0, 1, 0, 1))
-                    if closest_hit.geom:
-                        self._draw_entity_unrotated_obb(closest_hit.geom)
-                        self._raycast_geom(closest_hit.geom, mouse_ray)
+                        if closest_hit.geom:
+                            self._draw_entity_unrotated_obb(closest_hit.geom)
+                            self._raycast_geom(closest_hit.geom, mouse_ray)
         Timer2.end()
 
 
