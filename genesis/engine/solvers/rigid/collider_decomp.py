@@ -271,7 +271,7 @@ class Collider:
     def clear(self, envs_idx=None):
         if envs_idx is None:
             envs_idx = self._solver._scene._envs_idx
-        collider_kernel_clear(
+        kernel_collider_clear(
             envs_idx,
             self._solver.links_state,
             self._solver.links_info,
@@ -501,7 +501,7 @@ def collider_kernel_reset(
 
 # only used with hibernation ??
 @ti.kernel
-def collider_kernel_clear(
+def kernel_collider_clear(
     envs_idx: ti.types.ndarray(),
     links_state: array_class.LinksState,
     links_info: array_class.LinksInfo,
