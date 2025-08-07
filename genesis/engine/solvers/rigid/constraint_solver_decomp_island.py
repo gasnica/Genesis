@@ -238,6 +238,7 @@ class ConstraintSolverIsland:
                     self._solver.dofs_state,
                     self._solver.links_state,
                     self._solver.data_manager.rigid_global_info,
+                    self.contact_island,
                 )
                 func_wakeup_entity(
                     entity_b,
@@ -247,6 +248,7 @@ class ConstraintSolverIsland:
                     self._solver.dofs_state,
                     self._solver.links_state,
                     self._solver.data_manager.rigid_global_info,
+                    self.contact_island,
                 )
 
     @ti.func

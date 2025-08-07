@@ -928,6 +928,7 @@ class RigidSolver(Solver):
             entities_info=self.entities_info,
             rigid_global_info=self._rigid_global_info,
             static_rigid_sim_config=self._static_rigid_sim_config,
+            contact_island=self.constraint_solver.contact_island,
         )
         Timer2.split("_func_constraint_force")
         # timer.stamp("kernel_step_1")
@@ -3743,6 +3744,7 @@ def func_forward_dynamics(
     entities_info: array_class.EntitiesInfo,
     rigid_global_info: array_class.RigidGlobalInfo,
     static_rigid_sim_config: ti.template(),
+    contact_island: ti.template(),
 ):
     func_compute_mass_matrix(
         implicit_damping=ti.static(static_rigid_sim_config.integrator == gs.integrator.approximate_implicitfast),
@@ -3772,6 +3774,7 @@ def func_forward_dynamics(
         joints_info=joints_info,
         rigid_global_info=rigid_global_info,
         static_rigid_sim_config=static_rigid_sim_config,
+        contact_island=contact_island,
     )
     func_update_acc(
         update_cacc=False,
@@ -3893,6 +3896,7 @@ def kernel_step_1(
     entities_info: array_class.EntitiesInfo,
     rigid_global_info: array_class.RigidGlobalInfo,
     static_rigid_sim_config: ti.template(),
+    contact_island: ti.template(),
 ):
     if ti.static(static_rigid_sim_config.enable_mujoco_compatibility):
         _B = links_state.pos.shape[1]
@@ -3923,6 +3927,7 @@ def kernel_step_1(
         entities_info=entities_info,
         rigid_global_info=rigid_global_info,
         static_rigid_sim_config=static_rigid_sim_config,
+        contact_island=contact_island,
     )
 
 
@@ -4976,7 +4981,16 @@ def func_mark_all_entities_for_hibernation_or_update_aabb_sort_buffer(
                     entity_ref = entity_ref_range.start + i
                     entity_idx = ci.entity_id[entity_ref, i_b]
                     if entities_state.hibernated[entity_idx, i_b]:
-                        print(f"Entity {entity_idx} hibernation state corrupted")
+                        print(f"Entity {entity_idx} hibernation state corrupted (1)")
+                        pass
+
+            # verify that in a non-hibernated island all entities are not hibernated
+            if was_island_hibernated:
+                for i in range(entity_ref_range.n):
+                    entity_ref = entity_ref_range.start + i
+                    entity_idx = ci.entity_id[entity_ref, i_b]
+                    if not entities_state.hibernated[entity_idx, i_b]:
+                        print(f"Entity {entity_idx} hibernation state corrupted (2))")
                         pass
 
             # update collider sort_buffer with aabb extents along x-axis
@@ -4991,7 +5005,8 @@ def func_mark_all_entities_for_hibernation_or_update_aabb_sort_buffer(
                         collider_state.sort_buffer.value[max_idx, i_b] = max_val
 
             # perform hibernation
-            if is_island_hibernated:
+            if not was_island_hibernated and is_island_hibernated:
+                # print(f"Hibernate: island_idx: {island_idx} of {entity_ref_range.n} entities")
                 for i in range(entity_ref_range.n):
                     entity_ref = entity_ref_range.start + i
                     entity_idx = ci.entity_id[entity_ref, i_b]
@@ -5224,6 +5239,7 @@ def func_torque_and_passive_force(
     joints_info: array_class.JointsInfo,
     rigid_global_info: array_class.RigidGlobalInfo,
     static_rigid_sim_config: ti.template(),
+    contact_island: ti.template(),
 ):
     n_entities = entities_info.n_links.shape[0]
     _B = dofs_state.ctrl_mode.shape[1]
@@ -5311,7 +5327,7 @@ def func_torque_and_passive_force(
 
         if ti.static(static_rigid_sim_config.use_hibernation):
             if wakeup:
-                func_wakeup_entity(i_e, i_b, entities_state, entities_info, dofs_state, links_state, rigid_global_info)
+                func_wakeup_entity(i_e, i_b, entities_state, entities_info, dofs_state, links_state, rigid_global_info, contact_island)
 
     if ti.static(static_rigid_sim_config.use_hibernation):
         ti.loop_config(serialize=static_rigid_sim_config.para_level < gs.PARA_LEVEL.ALL)
