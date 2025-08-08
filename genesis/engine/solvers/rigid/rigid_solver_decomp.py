@@ -1016,6 +1016,7 @@ class RigidSolver(Solver):
             joints_info=self.joints_info,
             entities_state=self.entities_state,
             entities_info=self.entities_info,
+            geoms_state=self.geoms_state,
             rigid_global_info=self._rigid_global_info,
             static_rigid_sim_config=self._static_rigid_sim_config,
         )
@@ -3034,6 +3035,7 @@ def kernel_forward_dynamics(
     joints_info: array_class.JointsInfo,
     entities_state: array_class.EntitiesState,
     entities_info: array_class.EntitiesInfo,
+    geoms_state: array_class.GeomsState,
     rigid_global_info: array_class.RigidGlobalInfo,
     static_rigid_sim_config: ti.template(),
 ):
@@ -3045,6 +3047,7 @@ def kernel_forward_dynamics(
         joints_info=joints_info,
         entities_state=entities_state,
         entities_info=entities_info,
+        geoms_state=geoms_state,
         rigid_global_info=rigid_global_info,
         static_rigid_sim_config=static_rigid_sim_config,
     )
@@ -3749,6 +3752,7 @@ def func_forward_dynamics(
     joints_info: array_class.JointsInfo,
     entities_state: array_class.EntitiesState,
     entities_info: array_class.EntitiesInfo,
+    geoms_state: array_class.GeomsState,
     rigid_global_info: array_class.RigidGlobalInfo,
     static_rigid_sim_config: ti.template(),
     contact_island: ti.template(),
@@ -3779,6 +3783,7 @@ def func_forward_dynamics(
         links_state=links_state,
         links_info=links_info,
         joints_info=joints_info,
+        geoms_state=geoms_state,
         rigid_global_info=rigid_global_info,
         static_rigid_sim_config=static_rigid_sim_config,
         contact_island=contact_island,
@@ -3932,6 +3937,7 @@ def kernel_step_1(
         joints_info=joints_info,
         entities_state=entities_state,
         entities_info=entities_info,
+        geoms_state=geoms_state,
         rigid_global_info=rigid_global_info,
         static_rigid_sim_config=static_rigid_sim_config,
         contact_island=contact_island,
@@ -5261,6 +5267,7 @@ def func_torque_and_passive_force(
     links_state: array_class.LinksState,
     links_info: array_class.LinksInfo,
     joints_info: array_class.JointsInfo,
+    geoms_state: array_class.GeomsState,
     rigid_global_info: array_class.RigidGlobalInfo,
     static_rigid_sim_config: ti.template(),
     contact_island: ti.template(),
@@ -5351,7 +5358,7 @@ def func_torque_and_passive_force(
 
         if ti.static(static_rigid_sim_config.use_hibernation):
             if wakeup:
-                func_wakeup_entity(i_e, i_b, entities_state, entities_info, dofs_state, links_state, rigid_global_info, contact_island)
+                func_wakeup_entity(i_e, i_b, entities_state, entities_info, dofs_state, links_state, geoms_state, rigid_global_info, contact_island)
 
     if ti.static(static_rigid_sim_config.use_hibernation):
         ti.loop_config(serialize=static_rigid_sim_config.para_level < gs.PARA_LEVEL.ALL)
