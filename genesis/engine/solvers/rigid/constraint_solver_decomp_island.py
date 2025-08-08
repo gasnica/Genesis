@@ -240,6 +240,7 @@ class ConstraintSolverIsland:
                     self._solver.entities_info,
                     self._solver.dofs_state,
                     self._solver.links_state,
+                    self._solver.geoms_state,
                     self._solver.data_manager.rigid_global_info,
                     self.contact_island,
                 )
@@ -250,6 +251,7 @@ class ConstraintSolverIsland:
                     self._solver.entities_info,
                     self._solver.dofs_state,
                     self._solver.links_state,
+                    self._solver.geoms_state,
                     self._solver.data_manager.rigid_global_info,
                     self.contact_island,
                 )
